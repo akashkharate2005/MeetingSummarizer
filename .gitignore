@@ -1,0 +1,9 @@
+.env
+*.pyc
+__pycache__/
+node_modules/
+dist/
+.venv/
+*.db
+backend/storage/*
+!backend/storage/.gitkeep

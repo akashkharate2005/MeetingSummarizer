@@ -10,14 +10,17 @@ async function request(path, options={}){
   return ct.includes('application/json')?res.json():res.text()
 }
 export const api={
- register:(data)=>request('/auth/register',{method:'POST',body:JSON.stringify(data)}),
- login:(data)=>request('/auth/login',{method:'POST',body:JSON.stringify(data)}),
- me:()=>request('/auth/me'),
- meetings:(q='')=>request(`/meetings${q?`?q=${encodeURIComponent(q)}`:''}`),
- meeting:(id)=>request(`/meetings/${id}`),
- upload:(form)=>request('/meetings',{method:'POST',body:form}),
- updateAction:(id,data)=>request(`/action-items/${id}`,{method:'PATCH',body:JSON.stringify(data)}),
- remove:(id)=>request(`/meetings/${id}`,{method:'DELETE'}),
- audio:(id)=>{const t=token(); return `${API}/meetings/${id}/audio${t?`?token=${encodeURIComponent(t)}`:''}`},
- exportUrl:(id)=>{const t=token(); return `${API}/meetings/${id}/export.txt${t?`?token=${encodeURIComponent(t)}`:''}`}
+  register:(data)=>request('/auth/register',{method:'POST',body:JSON.stringify(data)}),
+  login:(data)=>request('/auth/login',{method:'POST',body:JSON.stringify(data)}),
+  googleConfig:()=>request('/auth/google/config'),
+  googleAuthUrl:()=>request('/auth/google/url'),
+  googleAuth:(data)=>request('/auth/google',{method:'POST',body:JSON.stringify(data)}),
+  me:()=>request('/auth/me'),
+  meetings:(q='')=>request(`/meetings${q?`?q=${encodeURIComponent(q)}`:''}`),
+  meeting:(id)=>request(`/meetings/${id}`),
+  upload:(form)=>request('/meetings',{method:'POST',body:form}),
+  updateAction:(id,data)=>request(`/action-items/${id}`,{method:'PATCH',body:JSON.stringify(data)}),
+  remove:(id)=>request(`/meetings/${id}`,{method:'DELETE'}),
+  audio:(id)=>{const t=token(); return `${API}/meetings/${id}/audio${t?`?token=${encodeURIComponent(t)}`:''}`},
+  exportUrl:(id)=>{const t=token(); return `${API}/meetings/${id}/export.txt${t?`?token=${encodeURIComponent(t)}`:''}`}
 }

@@ -14,6 +14,10 @@ class Settings(BaseSettings):
     storage_dir: str = "./storage"
     transcript_chunk_seconds: int = 180
     cors_origins: str = "http://localhost:5173"
+    frontend_url: str = "http://localhost:5173"
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    google_redirect_uri: str = "http://localhost:8000/api/auth/google/callback"
     summarization_prompt: str = """Summarize the meeting transcript into a concise, factual, action-oriented structure. Do not invent information. Extract key decisions and action items. For each action item, include an owner and due date only when explicitly stated or strongly inferable; otherwise use null."""
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

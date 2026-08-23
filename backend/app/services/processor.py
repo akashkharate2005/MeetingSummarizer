@@ -32,16 +32,18 @@ def process_meeting(meeting_id: int):
             meeting.duration_seconds = result["duration_seconds"]
 
         # If previous transcript/summary exist (e.g. on re-processing), clean them up
+        speaker_segments = result.get("speaker_segments", [])
         if meeting.transcript:
             meeting.transcript.text = transcript_text
             meeting.transcript.language = result.get("language")
+            meeting.transcript.speaker_segments = speaker_segments
         else:
             db.add(
                 Transcript(
                     meeting_id=meeting.id,
                     text=transcript_text,
                     language=result.get("language"),
-                    speaker_segments=[],
+                    speaker_segments=speaker_segments,
                 )
             )
 

@@ -38,6 +38,27 @@ SUMMARY_SCHEMA = {
     "additionalProperties": False,
 }
 
+SPEAKER_SEGMENTATION_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "speaker_segments": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "speaker": {"type": "string"},
+                    "timestamp": {"type": "string"},
+                    "text": {"type": "string"},
+                },
+                "required": ["speaker", "timestamp", "text"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    "required": ["speaker_segments"],
+    "additionalProperties": False,
+}
+
 TRANSCRIPTION_RETRIES = 4
 SUMMARY_RETRIES = 4
 RETRYABLE_STATUS_CODES = {408, 429, 500, 502, 503, 504}
@@ -546,6 +567,82 @@ Guidelines:
     return _run_with_retry(request, SUMMARY_RETRIES, "hierarchical summary merge")
 
 
+def _format_speaker_segments(c: Groq, transcript_text: str, total_duration_seconds: int = 0) -> list[dict]:
+    """Segment and format transcript text into chronological speaker turns using Groq LLM."""
+    if not transcript_text or not transcript_text.strip():
+        return []
+
+    sections = _chunk_text(transcript_text, max_chars=6000)
+    all_segments = []
+    sec_duration = float(total_duration_seconds) / max(1, len(sections)) if total_duration_seconds else 0.0
+
+    logger.info(f"[SPEAKERS] Formatting speaker turns across {len(sections)} section(s)...")
+
+    for s_idx, section in enumerate(sections, start=1):
+        start_sec_offset = (s_idx - 1) * sec_duration
+        start_m = int(start_sec_offset // 60)
+        start_s = int(start_sec_offset % 60)
+        offset_tag = f"{start_m:02d}:{start_s:02d}"
+
+        system = f"""You are an expert conversational dialogue analyst.
+Analyze the transcript section and segment it into sequential speaker turns with speaker labels and timestamps.
+
+Guidelines:
+- Detect natural turn-taking boundaries, dialogue shifts, questions, answers, and context changes.
+- Assign clear speaker labels: e.g. "Speaker 1", "Speaker 2", or actual names if explicitly addressed/introduced (e.g. "Akash", "Host").
+- If the section is a continuous monologue by one person, label all turns under that single speaker.
+- Estimate start timestamps for each turn in MM:SS format, starting from offset {offset_tag}.
+- Preserve the spoken text accurately without summarizing, altering, or omitting words.
+- Return structured JSON matching the supplied schema exactly.
+"""
+
+        user_msg = f"Base Start Offset: {offset_tag}\n\nTranscript Section:\n\n{section}"
+
+        def request():
+            response = c.chat.completions.create(
+                model=settings.groq_summary_model,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user_msg},
+                ],
+                temperature=0.1,
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "speaker_segmentation",
+                        "strict": True,
+                        "schema": SPEAKER_SEGMENTATION_SCHEMA,
+                    },
+                },
+            )
+            content = response.choices[0].message.content or ""
+            if not content:
+                return {"speaker_segments": []}
+            return json.loads(content)
+
+        try:
+            res = _run_with_retry(request, SUMMARY_RETRIES, f"speaker segmentation section {s_idx}/{len(sections)}")
+            segs = res.get("speaker_segments", [])
+            for seg in segs:
+                if seg.get("text", "").strip():
+                    all_segments.append({
+                        "speaker": seg.get("speaker", "Speaker 1").strip(),
+                        "timestamp": seg.get("timestamp", offset_tag).strip(),
+                        "text": seg.get("text", "").strip(),
+                    })
+        except Exception as e:
+            logger.warning(f"[SPEAKERS] Speaker segmentation failed for section {s_idx}: {e}")
+
+    if not all_segments and transcript_text.strip():
+        all_segments = [{
+            "speaker": "Speaker 1",
+            "timestamp": "00:00",
+            "text": transcript_text.strip()
+        }]
+
+    return all_segments
+
+
 def transcribe_and_summarize(path: str, mime_type: str | None = None) -> dict:
     """Execute complete end-to-end audio ingestion, chunking, STT, and summarization."""
     c = client()
@@ -592,6 +689,12 @@ def transcribe_and_summarize(path: str, mime_type: str | None = None) -> dict:
         if not full_transcript or successful_chunks == 0:
             raise RuntimeError("No speech could be extracted from any audio segment")
 
+        duration_sec = int(round(_ffprobe_duration(path)))
+
+        # Speaker segmentation pass
+        speaker_segments = _format_speaker_segments(c, full_transcript, duration_sec)
+        logger.info(f"[SPEAKERS] Generated {len(speaker_segments)} speaker segment turns")
+
         # Hierarchical summarization
         text_sections = _chunk_text(full_transcript)
         logger.info(
@@ -631,12 +734,13 @@ def transcribe_and_summarize(path: str, mime_type: str | None = None) -> dict:
 
         return {
             "transcript": full_transcript,
+            "speaker_segments": speaker_segments,
             "language": languages[0] if languages else "en",
             "summary": exec_summary,
             "decisions": decisions,
             "action_items": normalized_action_items,
             "warnings": warnings,
-            "duration_seconds": int(round(_ffprobe_duration(path))),
+            "duration_seconds": duration_sec,
         }
     finally:
         if work_dir and os.path.exists(work_dir):

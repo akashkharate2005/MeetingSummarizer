@@ -8,7 +8,9 @@ class User(Base):
     id = Column(Integer, primary_key=True)
     name = Column(String(120), nullable=False)
     email = Column(String(255), unique=True, index=True, nullable=False)
-    password_hash = Column(String(255), nullable=False)
+    password_hash = Column(String(255), nullable=True)
+    google_id = Column(String(255), unique=True, index=True, nullable=True)
+    avatar_url = Column(String(500), nullable=True)
     role = Column(String(30), default="user", nullable=False)
     meetings = relationship("Meeting", back_populates="user", cascade="all, delete-orphan")
 

@@ -35,6 +35,9 @@ services:
     build: ./frontend
     environment:
       VITE_API_URL: http://localhost:8000/api
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/index.html:/app/index.html
     ports:
       - "5173:5173"
     depends_on:

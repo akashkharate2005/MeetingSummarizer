@@ -14,8 +14,17 @@ class UserOut(BaseModel):
     id: int
     name: str
     email: EmailStr
+    avatar_url: str | None = None
     role: str
     model_config = ConfigDict(from_attributes=True)
+
+class GoogleAuthPayload(BaseModel):
+    credential: str | None = None
+    code: str | None = None
+
+class GoogleConfigOut(BaseModel):
+    enabled: bool
+    client_id: str | None = None
 
 class Token(BaseModel):
     access_token: str

@@ -193,10 +193,10 @@ function Detail({meetingId,back}){
            {` · `}<b style={{textTransform:'capitalize'}}>{m.status.replace(/_/g,' ')}</b>
          </p>
        </div>
-       <div className="actions">
-         <a className="secondary" href={api.exportUrl(m.id)} target="_blank" rel="noreferrer"><Download size={17}/> Export</a>
-         <button className="secondary" onClick={async()=>{if(confirm('Delete this meeting?')){await api.remove(m.id);back()}}}><Trash2 size={17}/></button>
-       </div>
+        <div className="actions">
+          <a className="secondary" href={api.exportUrl(m.id)} download={`meeting_${m.id}_export.txt`}><Download size={17}/> Export</a>
+          <button className="secondary" onClick={async()=>{if(confirm('Delete this meeting?')){await api.remove(m.id);back()}}}><Trash2 size={17}/></button>
+        </div>
      </div>
 
      {m.status==='completed_with_warnings'&&m.error_message&&

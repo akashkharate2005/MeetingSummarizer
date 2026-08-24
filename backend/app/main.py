@@ -280,15 +280,57 @@ def update_action(item_id: int, payload: ActionItemUpdate, user: User = Depends(
     if payload.completed is True: item.status = "completed"
     db.commit(); db.refresh(item); return item
 
-@app.get("/api/meetings/{meeting_id}/export.txt", response_class=PlainTextResponse)
+@app.get("/api/meetings/{meeting_id}/export.txt")
 def export_text(meeting_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     meeting = db.query(Meeting).filter(Meeting.id == meeting_id, Meeting.user_id == user.id).first()
     if not meeting: raise HTTPException(404, "Meeting not found")
-    lines = [f"# {meeting.title}", "", f"Date: {meeting.meeting_date.isoformat()}", "", "## Summary", meeting.summary.summary_text if meeting.summary else "Not available", "", "## Decisions"]
-    if meeting.summary:
+
+    clean_title = "".join(c for c in meeting.title if c.isalnum() or c in (" ", "_", "-")).strip() or "meeting"
+    filename = f"{clean_title.replace(' ', '_')}_{meeting.id}_export.txt"
+
+    lines = [
+        f"# {meeting.title}",
+        "",
+        f"Date: {meeting.meeting_date.strftime('%Y-%m-%d %H:%M:%S UTC') if meeting.meeting_date else 'N/A'}",
+        f"Duration: {meeting.duration_seconds}s" if meeting.duration_seconds else "",
+        "",
+        "## Executive Summary",
+        meeting.summary.summary_text if meeting.summary else "No summary available.",
+        "",
+        "## Key Decisions",
+    ]
+    if meeting.summary and meeting.summary.decisions:
         lines += [f"- {x}" for x in meeting.summary.decisions]
-        lines += ["", "## Action Items"] + [f"- [{'x' if a.completed else ' '}] {a.description} | Owner: {a.owner or 'Unassigned'} | Due: {a.due_date or '—'}" for a in meeting.summary.action_items]
+    else:
+        lines.append("- No explicit decisions recorded.")
+
+    lines += ["", "## Action Items"]
+    if meeting.summary and meeting.summary.action_items:
+        lines += [
+            f"- [{'x' if a.completed else ' '}] {a.description} | Owner: {a.owner or 'Unassigned'} | Due: {a.due_date or '—'} | Status: {a.status}"
+            for a in meeting.summary.action_items
+        ]
+    else:
+        lines.append("- No action items identified.")
+
     lines += ["", "## Transcript"]
+    if meeting.transcript and meeting.transcript.speaker_segments:
+        for seg in meeting.transcript.speaker_segments:
+            ts = f"[{seg.get('timestamp')}] " if seg.get('timestamp') else ""
+            spk = seg.get('speaker') or 'Speaker'
+            txt = seg.get('text') or ''
+            lines.append(f"{ts}{spk}: {txt}\n")
+    elif meeting.transcript and meeting.transcript.text:
+        lines.append(meeting.transcript.text)
+    else:
+        lines.append("No transcript available.")
+
+    content = "\n".join([line for line in lines if line is not None])
+    return PlainTextResponse(
+        content=content,
+        media_type="text/plain; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
 
 @app.delete("/api/meetings/{meeting_id}")
 def delete_meeting(meeting_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
